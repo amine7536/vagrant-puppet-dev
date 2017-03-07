@@ -1,5 +1,3 @@
 ---
   classes:
-    - helloworld
     - ntp
-  ntp::servers: "bar.foo.com"

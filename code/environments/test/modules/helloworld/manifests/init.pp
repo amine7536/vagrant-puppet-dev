@@ -1,7 +1,8 @@
 # Helloworld class
-class helloworld
-  ( $server = 'Unknown'){
+class helloworld  (
+  $server = 'Unknown',
+  ) {
   notify { 'Say hello':
-    message => "Hello from ${::environment}",
+    message => "Node => ${::hostname} : Env =>  ${::environment}",
   }
 }

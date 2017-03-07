@@ -1,26 +1,38 @@
 # -*- mode: ruby -*-
 # vi: set ft=ruby :
 
+ENV["LC_ALL"] = "en_US.UTF-8"
+
 Vagrant.configure(2) do |config|
 
   config.hostmanager.enabled = true
   config.hostmanager.ignore_private_ip = false
   config.hostmanager.include_offline = true
 
-  config.vm.define "puppet" do |puppet|
-    # Puppetmaster on CentOS 7
+  #
+  # Puppet Server
+  # centos73 - puppetserver version 2.x (java)
+  #
+  config.vm.define "puppetserver" do |puppet|
+    # Puppetserver on CentOS 7
     config.vm.provider "virtualbox" do |v|
-      v.memory = 2048
+      v.memory = 1024
     end
+    # PuppetServer configuration files
     puppet.vm.synced_folder ".", "/vagrant"
     puppet.vm.synced_folder "../code", "/puppet_code"
     puppet.vm.synced_folder "../puppetserver", "/puppet_puppetserver"
+
+    # Box configuration
     puppet.vm.box = "boxcutter/centos73"
-    puppet.vm.hostname = "puppet.example.com"
+    puppet.vm.box_url = "file:///Users/amine/Develop/github/boxcutter-centos/box/virtualbox/centos73-2.0.22.box"
+    puppet.vm.hostname = "puppetserver.lab.local.dev"
     puppet.vm.network :private_network, ip: "10.0.20.10"
-    puppet.hostmanager.aliases = %w(puppet)
+    puppet.hostmanager.aliases = %w(puppetserver)
+
+    # Provisioning
     puppet.vm.provision "shell", inline: <<-SHELL
-      sudo yum update -y
+      # sudo yum update -y
       sudo rpm -ivh https://yum.puppetlabs.com/puppetlabs-release-pc1-el-7.noarch.rpm
       sudo yum install puppetserver -y
       sudo rm -rf /etc/puppetlabs/code
@@ -28,51 +40,77 @@ Vagrant.configure(2) do |config|
       sudo rm -rf /etc/puppetlabs/puppetserver
       sudo ln -s /puppet_puppetserver /etc/puppetlabs/puppetserver
       sudo sed -i 's/2g/512m/g' /etc/sysconfig/puppetserver
-      echo "*.example.com" | sudo tee /etc/puppetlabs/puppet/autosign.conf
+      echo "*.lab.local.dev" | sudo tee /etc/puppetlabs/puppet/autosign.conf
       sudo /opt/puppetlabs/bin/puppetserver gem install hiera-eyaml
       sudo cp -r /vagrant/keys /etc/puppetlabs
       sudo chown puppet:puppet /etc/puppetlabs/keys/private_key.pkcs7.pem
       sudo chown puppet:puppet /etc/puppetlabs/keys/public_key.pkcs7.pem
+      sudo rm -f /etc/puppetlabs/puppet/puppet.conf
+      sudo cp /vagrant/puppet-server.conf /etc/puppetlabs/puppet/puppet.conf
       sudo service puppetserver start
+      # Vagrant CentOS 7 bug ?
+      sudo systemctl restart network
     SHELL
   end
 
+  #
+  # Client
+  # centos73 - puppet agent version
+  #
   config.vm.define "agent1" do |agent1|
     # Puppet agent on CentOS 7
+    config.vm.provider "virtualbox" do |v|
+      v.memory = 512
+    end
+
+    # Box configuration
     agent1.vm.box = "boxcutter/centos73"
-    agent1.vm.hostname = "agent1.example.com"
+    agent1.vm.box_url = "file:///Users/amine/Develop/github/boxcutter-centos/box/virtualbox/centos73-2.0.22.box"
+    agent1.vm.hostname = "agent1.lab.local.dev"
     agent1.vm.network :private_network, ip: "10.0.20.11"
     agent1.hostmanager.aliases = %w(agent1)
+
+    # Provisioning
     agent1.vm.provision "shell", inline: <<-SHELL
-      sudo yum update -y
+      # sudo yum update -y
       sudo rpm -ivh https://yum.puppetlabs.com/puppetlabs-release-pc1-el-7.noarch.rpm
       sudo yum install puppet-agent -y
+      sudo rm -f /etc/puppetlabs/puppet/puppet.conf
+      sudo cp /vagrant/puppet-agent.conf /etc/puppetlabs/puppet/puppet.conf
+      sudo service puppet start
+      # Vagrant CentOS 7 bug ?
+      sudo systemctl restart network
+    SHELL
+  end
+
+  #
+  # Client
+  # centos68 - puppet agent version 3.8
+  #
+  config.vm.define "agent2" do |agent2|
+    # Puppet agent on CentOS 7
+    config.vm.provider "virtualbox" do |v|
+      v.memory = 512
+    end
+
+    # Box configuration
+    agent2.vm.box = "boxcutter/centos68"
+    agent2.vm.box_url = "file:///Users/amine/Develop/github/boxcutter-centos/box/virtualbox/centos68-2.0.22.box"
+    agent2.vm.hostname = "agent2.lab.local.dev"
+    agent2.vm.network :private_network, ip: "10.0.20.12"
+    agent2.hostmanager.aliases = %w(agent2)
+
+    # Provisioning
+    agent2.vm.provision "shell", inline: <<-SHELL
+      # sudo yum update -y
+      sudo rpm -ivh http://yum.puppetlabs.com/el/6/products/i386/puppetlabs-release-6-7.noarch.rpm
+      sudo yum install -y epel-release
+      sudo yum install -y puppet
+      sudo rm -f /etc/puppet/puppet.conf
+      sudo cp /vagrant/puppet-agent-centos6.conf /etc/puppet/puppet.conf
+      sudo chkconfig puppet on
       sudo service puppet start
     SHELL
   end
 
-  # config.vm.define "agent2" do |agent2|
-  #   # Puppet agent on Debian
-  #   agent2.vm.box = "ARTACK/debian-jessie"
-  #   agent2.vm.hostname = "agent2.example.com"
-  #   agent2.vm.network :private_network, ip: "10.0.20.12"
-  #   agent2.hostmanager.aliases = %w(agent2)
-  #   agent2.vm.provision "shell", inline: <<-SHELL
-  #     wget https://apt.puppetlabs.com/puppetlabs-release-pc1-jessie.deb
-  #     sudo dpkg -i puppetlabs-release-pc1-jessie.deb
-  #     sudo apt-get update
-  #     sudo apt-get install puppet-agent -y
-  #     sudo /opt/puppetlabs/bin/puppet agent --enable
-  #     sudo service puppet start
-  #   SHELL
-  # end
-
-  # config.vm.define "agent3" do |agent3|
-  #   # Puppet agent on Windows 2012
-  #   agent3.vm.box = "devopsguys/Windows2012R2Eval"
-  #   agent3.vm.hostname = "agent3"
-  #   agent3.vm.network :private_network, ip: "10.0.20.13"
-  #   agent3.hostmanager.aliases = %w(agent3)
-  #   agent3.vm.provision "shell", :path => "windows.ps1"
-  # end
 end
